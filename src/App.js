@@ -15,6 +15,10 @@ function App() {
     } else {
       solveButton.setAttribute('disabled', true)
     }
+
+    fetch('https://en.wiktionary.org/wiki/Lewandowsky#English', {})
+      .then (response => console.log(response))
+
   }, [])
 
   const findSquare = (i, rowNumber, grid) => {
@@ -376,6 +380,8 @@ function App() {
     }
     console.log('currentGrid', currentGrid)
 
+    AIFunction(currentGrid)
+
     let step1Output = solutionStep1(currentGrid)
 
     if (step1Output.newValueFound === true) {
@@ -420,6 +426,121 @@ function App() {
       console.log('NO SOLUTION FOUND')
     }
   }
+
+  
+  // AI TEST STARTS HERE
+
+  const AIFunction = (testGrid) => {
+    console.log('testGrid', testGrid)
+    function solveSudoku(input) {
+      const grid = parse(input);
+
+      console.log('grid', grid)
+
+      // Each mask stores which digits (bits 1..9) are already used.
+      const rows = new Array(9).fill(0);
+      const cols = new Array(9).fill(0);
+      const boxes = new Array(9).fill(0);
+      const empties = [];
+      const boxOf = (r, c) => Math.floor(r / 3) * 3 + Math.floor(c / 3);
+
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          const v = grid[r][c];
+          if (v === 0) { empties.push([r, c]); continue; }
+          const bit = 1 << v;
+          const b = boxOf(r, c);
+          if ((rows[r] | cols[c] | boxes[b]) & bit) return null; // duplicate given
+          rows[r] |= bit; cols[c] |= bit; boxes[b] |= bit;
+        }
+      }
+
+      // empties[0 .. remaining-1] are the cells still to fill.
+      function search(remaining) {
+        if (remaining === 0) return true;
+
+        // MRV heuristic: pick the empty cell with the fewest legal candidates.
+        let bestIdx = -1, bestMask = 0, bestCount = 10;
+        for (let i = 0; i < remaining; i++) {
+          const [r, c] = empties[i];
+          const mask = ~(rows[r] | cols[c] | boxes[boxOf(r, c)]) & 0x3FE; // bits 1..9
+          const count = popcount(mask);
+          if (count < bestCount) {
+            bestCount = count; bestIdx = i; bestMask = mask;
+            if (count <= 1) break; // can't do better than a forced move (or a dead end)
+          }
+        }
+        if (bestCount === 0) return false; // dead end: some cell has no options
+
+        // Move the chosen cell to the end of the active region.
+        [empties[bestIdx], empties[remaining - 1]] = [empties[remaining - 1], empties[bestIdx]];
+        const [r, c] = empties[remaining - 1];
+        const b = boxOf(r, c);
+
+        let mask = bestMask;
+        while (mask) {
+          const bit = mask & -mask; // lowest set bit
+          mask ^= bit;
+          rows[r] |= bit; cols[c] |= bit; boxes[b] |= bit;
+          grid[r][c] = 31 - Math.clz32(bit); // bit position = digit
+          if (search(remaining - 1)) return true;
+          rows[r] ^= bit; cols[c] ^= bit; boxes[b] ^= bit; // undo
+        }
+        grid[r][c] = 0;
+        return false;
+      }
+
+      return search(empties.length) ? grid : null;
+    }
+
+    function popcount(x) {
+      let n = 0;
+      while (x) { x &= x - 1; n++; }
+      return n;
+    }
+
+    function parse(input) {
+      if (typeof input === "string") {
+        const chars = input.replace(/\s/g, "");
+        if (chars.length !== 81) throw new Error("Puzzle string must have 81 cells");
+        const g = [];
+        for (let r = 0; r < 9; r++) {
+          g.push([...chars.slice(r * 9, r * 9 + 9)].map(ch => (ch === "." ? 0 : Number(ch))));
+        }
+        return g;
+      }
+      return input.map(row => row.slice()); // copy so the original isn't mutated
+    }
+
+    function printGrid(grid) {
+      grid.forEach((row, r) => {
+        if (r % 3 === 0 && r) console.log("------+-------+------");
+        console.log(row.map((v, c) => (c % 3 === 0 && c ? "| " : "") + (v || ".")).join(" "));
+      });
+    }
+
+    // const testGrid = [0, 6, 0, 7, 0, 9, 0, 1, 0, 4, 0, 0, 0, 2, 0, 0, 0, 6, 0, 0, 7, 6, 0, 1, 3, 0, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 4, 0, 5, 0, 0, 0, 7, 1, 0, 0, 6, 0, 0, 5, 3, 6, 5, 0, 3, 0, 8, 0, 9, 1]
+
+    const puzzle =
+      testGrid.slice(0, 9).join('') +
+      testGrid.slice(9, 18).join('') +
+      testGrid.slice(18, 27).join('') +
+      testGrid.slice(27, 36).join('') +
+      testGrid.slice(36, 45).join('') +
+      testGrid.slice(45, 54).join('') +
+      testGrid.slice(54, 63).join('') +
+      testGrid.slice(63, 72).join('') +
+      testGrid.slice(72, 81).join('');
+
+    console.log("Puzzle:");
+    printGrid(parse(puzzle));
+
+    const solution = solveSudoku(puzzle);
+    console.log("\nSolution:");
+    solution ? printGrid(solution) : console.log("No solution found.");
+  }
+
+    // AI TEST ENDS HERE
 
   const checkNumber = (e) => {
     const enteredValue = e.target.innerHTML
@@ -788,103 +909,103 @@ function App() {
       {/* <table>
         <tbody>
           <tr>
-            <td id="0" className="square1" contentEditable></td>
-            <td id="1" className="square1" contentEditable>7</td>
-            <td id="2" className="square1" contentEditable></td>
-            <td id="3" className="square2" contentEditable></td>
-            <td id="4" className="square2" contentEditable></td>
-            <td id="5" className="square2" contentEditable>6</td>
-            <td id="6" className="square3" contentEditable></td>
-            <td id="7" className="square3" contentEditable></td>
-            <td id="8" className="square3" contentEditable></td>
+            <td id="0" className="square1" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="1" className="square1" contentEditable onBlur={(e) => checkNumber(e)}>7</td>
+            <td id="2" className="square1" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="3" className="square2" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="4" className="square2" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="5" className="square2" contentEditable onBlur={(e) => checkNumber(e)}>6</td>
+            <td id="6" className="square3" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="7" className="square3" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="8" className="square3" contentEditable onBlur={(e) => checkNumber(e)}></td>
           </tr>
           <tr>
-            <td id="9" className="square1" contentEditable>9</td>
-            <td id="10" className="square1" contentEditable></td>
-            <td id="11" className="square1" contentEditable></td>
-            <td id="12" className="square2" contentEditable></td>
-            <td id="13" className="square2" contentEditable></td>
-            <td id="14" className="square2" contentEditable></td>
-            <td id="15" className="square3" contentEditable></td>
-            <td id="16" className="square3" contentEditable>4</td>
-            <td id="17" className="square3" contentEditable>1</td>
+            <td id="9" className="square1" contentEditable onBlur={(e) => checkNumber(e)}>9</td>
+            <td id="10" className="square1" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="11" className="square1" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="12" className="square2" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="13" className="square2" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="14" className="square2" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="15" className="square3" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="16" className="square3" contentEditable onBlur={(e) => checkNumber(e)}>4</td>
+            <td id="17" className="square3" contentEditable onBlur={(e) => checkNumber(e)}>1</td>
           </tr>
           <tr>
-            <td id="18" className="square1" contentEditable></td>
-            <td id="19" className="square1" contentEditable></td>
-            <td id="20" className="square1" contentEditable>8</td>
-            <td id="21" className="square2" contentEditable></td>
-            <td id="22" className="square2" contentEditable></td>
-            <td id="23" className="square2" contentEditable>9</td>
-            <td id="24" className="square3" contentEditable></td>
-            <td id="25" className="square3" contentEditable>5</td>
-            <td id="26" className="square3" contentEditable></td>
+            <td id="18" className="square1" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="19" className="square1" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="20" className="square1" contentEditable onBlur={(e) => checkNumber(e)}>8</td>
+            <td id="21" className="square2" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="22" className="square2" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="23" className="square2" contentEditable onBlur={(e) => checkNumber(e)}>9</td>
+            <td id="24" className="square3" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="25" className="square3" contentEditable onBlur={(e) => checkNumber(e)}>5</td>
+            <td id="26" className="square3" contentEditable onBlur={(e) => checkNumber(e)}></td>
           </tr>
           <tr>
-            <td id="27" className="square4" contentEditable></td>
-            <td id="28" className="square4" contentEditable>9</td>
-            <td id="29" className="square4" contentEditable></td>
-            <td id="30" className="square5" contentEditable></td>
-            <td id="31" className="square5" contentEditable></td>
-            <td id="32" className="square5" contentEditable>7</td>
-            <td id="33" className="square6" contentEditable></td>
-            <td id="34" className="square6" contentEditable></td>
-            <td id="35" className="square6" contentEditable>2</td>
+            <td id="27" className="square4" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="28" className="square4" contentEditable onBlur={(e) => checkNumber(e)}>9</td>
+            <td id="29" className="square4" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="30" className="square5" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="31" className="square5" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="32" className="square5" contentEditable onBlur={(e) => checkNumber(e)}>7</td>
+            <td id="33" className="square6" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="34" className="square6" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="35" className="square6" contentEditable onBlur={(e) => checkNumber(e)}>2</td>
           </tr>
           <tr>
-            <td id="36" className="square4" contentEditable></td>
-            <td id="37" className="square4" contentEditable></td>
-            <td id="38" className="square4" contentEditable>3</td>
-            <td id="39" className="square5" contentEditable></td>
-            <td id="40" className="square5" contentEditable></td>
-            <td id="41" className="square5" contentEditable></td>
-            <td id="42" className="square6" contentEditable>8</td>
-            <td id="43" className="square6" contentEditable></td>
-            <td id="44" className="square6" contentEditable></td>
+            <td id="36" className="square4" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="37" className="square4" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="38" className="square4" contentEditable onBlur={(e) => checkNumber(e)}>3</td>
+            <td id="39" className="square5" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="40" className="square5" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="41" className="square5" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="42" className="square6" contentEditable onBlur={(e) => checkNumber(e)}>8</td>
+            <td id="43" className="square6" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="44" className="square6" contentEditable onBlur={(e) => checkNumber(e)}></td>
           </tr>
           <tr>
-            <td id="45" className="square4" contentEditable>4</td>
-            <td id="46" className="square4" contentEditable></td>
-            <td id="47" className="square4" contentEditable></td>
-            <td id="48" className="square5" contentEditable>8</td>
-            <td id="49" className="square5" contentEditable></td>
-            <td id="50" className="square5" contentEditable></td>
-            <td id="51" className="square6" contentEditable></td>
-            <td id="52" className="square6" contentEditable>1</td>
-            <td id="53" className="square6" contentEditable></td>
+            <td id="45" className="square4" contentEditable onBlur={(e) => checkNumber(e)}>4</td>
+            <td id="46" className="square4" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="47" className="square4" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="48" className="square5" contentEditable onBlur={(e) => checkNumber(e)}>8</td>
+            <td id="49" className="square5" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="50" className="square5" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="51" className="square6" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="52" className="square6" contentEditable onBlur={(e) => checkNumber(e)}>1</td>
+            <td id="53" className="square6" contentEditable onBlur={(e) => checkNumber(e)}></td>
           </tr>
           <tr>
-            <td id="54" className="square7" contentEditable></td>
-            <td id="55" className="square7" contentEditable>8</td>
-            <td id="56" className="square7" contentEditable></td>
-            <td id="57" className="square8" contentEditable>3</td>
-            <td id="58" className="square8" contentEditable></td>
-            <td id="59" className="square8" contentEditable></td>
-            <td id="60" className="square9" contentEditable>9</td>
-            <td id="61" className="square9" contentEditable></td>
-            <td id="62" className="square9" contentEditable></td>
+            <td id="54" className="square7" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="55" className="square7" contentEditable onBlur={(e) => checkNumber(e)}>8</td>
+            <td id="56" className="square7" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="57" className="square8" contentEditable onBlur={(e) => checkNumber(e)}>3</td>
+            <td id="58" className="square8" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="59" className="square8" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="60" className="square9" contentEditable onBlur={(e) => checkNumber(e)}>9</td>
+            <td id="61" className="square9" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="62" className="square9" contentEditable onBlur={(e) => checkNumber(e)}></td>
           </tr>
           <tr>
-            <td id="63" className="square7" contentEditable>1</td>
-            <td id="64" className="square7" contentEditable>6</td>
-            <td id="65" className="square7" contentEditable></td>
-            <td id="66" className="square8" contentEditable></td>
-            <td id="67" className="square8" contentEditable></td>
-            <td id="68" className="square8" contentEditable></td>
-            <td id="69" className="square9" contentEditable></td>
-            <td id="70" className="square9" contentEditable></td>
-            <td id="71" className="square9" contentEditable>7</td>
+            <td id="63" className="square7" contentEditable onBlur={(e) => checkNumber(e)}>1</td>
+            <td id="64" className="square7" contentEditable onBlur={(e) => checkNumber(e)}>6</td>
+            <td id="65" className="square7" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="66" className="square8" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="67" className="square8" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="68" className="square8" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="69" className="square9" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="70" className="square9" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="71" className="square9" contentEditable onBlur={(e) => checkNumber(e)}>7</td>
           </tr>
           <tr>
-            <td id="72" className="square7" contentEditable></td>
-            <td id="73" className="square7" contentEditable></td>
-            <td id="74" className="square7" contentEditable></td>
-            <td id="75" className="square8" contentEditable>5</td>
-            <td id="76" className="square8" contentEditable></td>
-            <td id="77" className="square8" contentEditable></td>
-            <td id="78" className="square9" contentEditable></td>
-            <td id="79" className="square9" contentEditable>8</td>
-            <td id="80" className="square9" contentEditable></td>
+            <td id="72" className="square7" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="73" className="square7" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="74" className="square7" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="75" className="square8" contentEditable onBlur={(e) => checkNumber(e)}>5</td>
+            <td id="76" className="square8" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="77" className="square8" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="78" className="square9" contentEditable onBlur={(e) => checkNumber(e)}></td>
+            <td id="79" className="square9" contentEditable onBlur={(e) => checkNumber(e)}>8</td>
+            <td id="80" className="square9" contentEditable onBlur={(e) => checkNumber(e)}></td>
           </tr>
         </tbody>
       </table> */}
